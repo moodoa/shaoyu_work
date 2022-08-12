@@ -1,50 +1,107 @@
-from ckiptagger import data_utils
-data_utils.download_data_gdown("./")
+import requests
+import pandas as pd
+from bs4 import BeautifulSoup
+from datetime import datetime, timedelta
 
+def find_udn_news(search_word):
+    infos = []
+    keepgoing = True
+    page = 1
+    while keepgoing:
+        content = requests.get(f"https://udn.com/api/more?page={page}&id=search:{search_word}&channelId=2&type=searchword").json()
+        for article in content["lists"]:
+            article_date = datetime.strptime(article["time"]["date"], "%Y-%m-%d %H:%M:%S")
+            if article_date>datetime(2017,1,1) and article_date<datetime(2020,12,31):
+                info = {}
+                info["url"] = article["titleLink"]
+                info["cateTitle"] = article["cateTitle"]
+                info["title"] = article["title"]
+                info["content"] = get_news_content(article["titleLink"])
+                info["time"] = article["time"]["date"]
+                infos.append(info)
+            elif article_date < datetime(2017,1,1):
+                keepgoing = False
+                break
+        page += 1
+    return infos
+
+def get_news_content(url):
+    output = ""
+    text = requests.get(url).text
+    soup = BeautifulSoup(text, "lxml")
+    try:
+        for p in soup.select_one("section.article-content__editor").select("p"):
+            output += (p.text)
+    except:
+        try:
+            for p in soup.select("p"):
+                output += (p.text)
+        except:
+            pass
+    return output
+        
+
+
+# from ckiptagger import data_utils
+# data_utils.download_data_gdown("./")
+from itertools import combinations
 from ckiptagger import WS, POS
 ws = WS("./data")
 pos = POS("./data")
 
-text1 = """高雄市議員黃捷為推廣ACG產業，日前與女僕咖啡店聯名舉辦一日店長的活動，預約開放不到半小時就被搶光，甚至還有支持者打了100多通電話都沒訂到，讓她相當感謝大家的厚愛。繼先前在個人社群曝光女僕裝扮的照片後，昨（9）晚她也釋出長達3分40秒的Vlog影片，不僅首次綁雙馬尾、挑戰用番茄醬在餐盤上作畫，還與客人一起施展「萌え萌え」的好吃魔法，有別於以往問政的專業形象讓網友直喊實在太可愛。
-
-黃捷化身「俏麗小女僕」影片曝光　網見超萌模樣笑：會穿這樣質詢嗎？
-黃捷綁起雙馬尾穿著全套女僕裝扮。（圖／翻攝自YouTube頻道「高雄市議員鳳山黃捷」）
-黃捷昨天在FB、IG及YouTube頻道上傳了先前擔任一日女僕店長的Vlog，只見暱稱為「捷醬」的她，頭上綁著俏麗的雙馬尾，身穿黑白相間的女僕套裝，認真招待每位來店裡的支持者，不但努力用番茄醬在餐盤上完成大加作畫的要求，還拋開矜持比著可愛的動物手勢與愛心，和眾人一起大聲唸出會讓食物變美味的「好吃魔法」，十分投入扮演的角色之中。
-
-黃捷化身「俏麗小女僕」影片曝光　網見超萌模樣笑：會穿這樣質詢嗎？
-黃捷認真練習「好吃魔法」。（圖／翻攝自YouTube頻道「高雄市議員鳳山黃捷」）
-黃捷在影片中表示「今天來這邊擔任一日店長，其實有很多突破我個人心魔的體驗，包括綁雙馬尾，我的人生從來沒有綁過雙馬尾，就獻給今天，所以你們現場看到的真的是史無前例，然後也不會有下一次了，希望大家好好保持今天的印象」，同時也感謝今天到場的每位支持者，與協助她裝扮並完成今日活動的女僕夥伴，希望大家對於今日的體驗感到開心。
-
-黃捷化身「俏麗小女僕」影片曝光　網見超萌模樣笑：會穿這樣質詢嗎？
-黃捷與支持者熱情合照。（圖／翻攝自YouTube頻道「高雄市議員鳳山黃捷」）
-影片曝光後在社群上引起熱烈討論，許多網友們紛紛留言道「捷醬一生推」、「捷醬太可愛啦」、「不可以那麼可愛」、「想不到議員也有可愛的一面」、「扮起可愛女僕完全沒違和感」、「真的不考慮穿這樣拜票？」、「這不留言支持說不過去」，也有網友詢問道「下次會穿這樣進議會質詢邁邁嗎？」，她也開玩笑回覆「邁邁如果一起穿的話（？」。
 
 
-"""
 
-for mark in ["。", "，", "？", "!"]:
-    text1 = text1.replace(mark, "$")
-
-sentences = text1.split("$")
-
-box = {}
-come_with = {}
-for sentence in sentences:
-    ws_results = ws([sentence])
-    pos_results = pos(ws_results)
-    temp = []
-    for idx in range(len(ws_results[0])):
-        if pos_results[0][idx] == "VH":
-            if ws_results[0][idx] not in box:
-                box[ws_results[0][idx]] = 1
-            else:
-                box[ws_results[0][idx]] += 1
-        
-            if len(ws_results[0][idx])>1:
-                temp.append(ws_results[0][idx])
-            for combi in list(combinations(temp, 2)):
-                sorted(combi)
-                if combi not in come_with:
-                    come_with[combi] = 1
+def collect_come_with(text):
+    for mark in ["。", "，", "？", "!"]:
+        text = text.replace(mark, "$")
+    for mark in ["\r", "\n"]:
+        text = text.replace(mark, "")
+    sentences = text.split("$")
+    box = {}
+    come_with = {}
+    for sentence in sentences:
+        ws_results = ws([sentence])
+        pos_results = pos(ws_results)
+        temp = []
+        for idx in range(len(ws_results[0])):
+            if pos_results[0][idx] == "VH" and len(ws_results[0][idx]) > 1:
+                if ws_results[0][idx] not in box:
+                    box[ws_results[0][idx]] = 1
                 else:
-                    come_with[combi] += 1
+                    box[ws_results[0][idx]] += 1
+
+                if len(ws_results[0][idx])>1:
+                    temp.append(ws_results[0][idx])
+                for combi in list(combinations(temp, 2)):
+                    sorted(combi)
+                    if combi not in come_with:
+                        come_with[combi] = 1
+                    else:
+                        come_with[combi] += 1
+    return box, come_with
+
+res = find_udn_news("黃捷")
+
+all_box = {}
+all_come_with = {}
+for r in res:
+    box, come_with = collect_come_with(r["content"])
+    for k, v in box.items():
+        if k not in all_box:
+            all_box[k] = v
+        else:
+            all_box[k] += v
+    for k, v in come_with.items():
+        if k not in all_come_with:
+            all_come_with[k] = v
+        else:
+            all_come_with[k] += v
+
+
+
+
+
+sorted(all_box.items(), key=lambda x:x[1], reverse=True)
+
+all_come_with
